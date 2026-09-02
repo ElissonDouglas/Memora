@@ -1,6 +1,6 @@
-package com.memory.memory_api.dto;
+package com.memory.memora_api.dto;
 
-import com.memory.memory_api.model.MemoryType;
+import com.memory.memora_api.model.MemoryType;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;

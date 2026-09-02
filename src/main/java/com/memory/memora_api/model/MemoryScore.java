@@ -1,4 +1,4 @@
-package com.memory.memory_api.model;
+package com.memory.memora_api.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

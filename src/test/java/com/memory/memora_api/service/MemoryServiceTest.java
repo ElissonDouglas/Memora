@@ -1,11 +1,11 @@
-package com.memory.memory_api.service;
+package com.memory.memora_api.service;
 
-import com.memory.memory_api.dto.MemoryRequestDTO;
-import com.memory.memory_api.dto.MemoryResponseDTO;
-import com.memory.memory_api.exception.ResourceNotFoundException;
-import com.memory.memory_api.model.Memory;
-import com.memory.memory_api.model.MemoryType;
-import com.memory.memory_api.repository.MemoryRepository;
+import com.memory.memora_api.dto.MemoryRequestDTO;
+import com.memory.memora_api.dto.MemoryResponseDTO;
+import com.memory.memora_api.exception.ResourceNotFoundException;
+import com.memory.memora_api.model.Memory;
+import com.memory.memora_api.model.MemoryType;
+import com.memory.memora_api.repository.MemoryRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

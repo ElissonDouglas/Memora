@@ -1,4 +1,4 @@
-package com.memory.memory_api;
+package com.memory.memora_api;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

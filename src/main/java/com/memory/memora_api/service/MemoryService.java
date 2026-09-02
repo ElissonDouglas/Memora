@@ -1,19 +1,17 @@
-package com.memory.memory_api.service;
+package com.memory.memora_api.service;
 
-import com.memory.memory_api.dto.MemoryRequestDTO;
-import com.memory.memory_api.dto.MemoryResponseDTO;
-import com.memory.memory_api.exception.ResourceNotFoundException;
-import com.memory.memory_api.model.Memory;
-import com.memory.memory_api.model.MemoryScore;
-import com.memory.memory_api.model.MemoryType;
-import com.memory.memory_api.repository.MemoryRepository;
+import com.memory.memora_api.dto.MemoryRequestDTO;
+import com.memory.memora_api.dto.MemoryResponseDTO;
+import com.memory.memora_api.exception.ResourceNotFoundException;
+import com.memory.memora_api.model.Memory;
+import com.memory.memora_api.model.MemoryType;
+import com.memory.memora_api.repository.MemoryRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;

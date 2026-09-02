@@ -1,7 +1,8 @@
-package com.memory.memory_api.config;
+package com.memory.memora_api.config;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -11,11 +12,13 @@ import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory;
 public class MongoConfig {
 
     private static final String DATABASE_NAME = "memory_api_db";
-    private static final String CONNECTION_STRING = "mongodb://localhost:27017";
+
+    @Value("${spring.data.mongodb.uri:mongodb://localhost:27017}")
+    private String connectionUri;
 
     @Bean
     public SimpleMongoClientDatabaseFactory mongoDbFactory() {
-        MongoClient mongoClient = MongoClients.create(CONNECTION_STRING);
+        MongoClient mongoClient = MongoClients.create(connectionUri);
         return new SimpleMongoClientDatabaseFactory(mongoClient, DATABASE_NAME);
     }
 

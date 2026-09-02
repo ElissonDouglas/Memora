@@ -1,6 +1,5 @@
-package com.memory.memory_api.exception;
+package com.memory.memora_api.exception;
 
-import com.memory.memory_api.exception.StandardError;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

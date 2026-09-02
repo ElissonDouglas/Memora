@@ -1,7 +1,7 @@
-package com.memory.memory_api.dto;
+package com.memory.memora_api.dto;
 
-import com.memory.memory_api.model.Memory;
-import com.memory.memory_api.model.MemoryType;
+import com.memory.memora_api.model.Memory;
+import com.memory.memora_api.model.MemoryType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;

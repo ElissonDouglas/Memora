@@ -1,7 +1,7 @@
-package com.memory.memory_api.repository;
+package com.memory.memora_api.repository;
 
-import com.memory.memory_api.model.Memory;
-import com.memory.memory_api.model.MemoryType;
+import com.memory.memora_api.model.Memory;
+import com.memory.memora_api.model.MemoryType;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.List;

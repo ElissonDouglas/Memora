@@ -1,9 +1,9 @@
-package com.memory.memory_api.controller;
+package com.memory.memora_api.controller;
 
-import com.memory.memory_api.dto.MemoryRequestDTO;
-import com.memory.memory_api.dto.MemoryResponseDTO;
-import com.memory.memory_api.model.MemoryType;
-import com.memory.memory_api.service.MemoryService;
+import com.memory.memora_api.dto.MemoryRequestDTO;
+import com.memory.memora_api.dto.MemoryResponseDTO;
+import com.memory.memora_api.model.MemoryType;
+import com.memory.memora_api.service.MemoryService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;

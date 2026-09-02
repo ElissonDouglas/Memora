@@ -1,4 +1,4 @@
-package com.memory.memory_api.exception;
+package com.memory.memora_api.exception;
 
 import java.time.Instant;
 import java.util.List;
