@@ -54,12 +54,10 @@ public class MemoryController {
     }
 
     @GetMapping("/user/{userId}/search")
-    public ResponseEntity<List<MemoryResponseDTO>> searchMemories(
+    public ResponseEntity<List<MemoryResponseDTO>> searchSimilarMemories(
             @PathVariable String userId,
             @RequestParam String query,
-            @RequestParam(defaultValue = "0.7") double minSimilarity) {
-
-        List<MemoryResponseDTO> results = memoryService.searchSimilarMemories(userId, query, minSimilarity);
-        return ResponseEntity.ok(results);
+            @RequestParam(defaultValue = "0.58") double minSimilarity) {
+        return ResponseEntity.ok(memoryService.searchSimilarMemories(userId, query, minSimilarity));
     }
 }

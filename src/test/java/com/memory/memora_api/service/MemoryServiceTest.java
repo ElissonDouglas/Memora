@@ -12,10 +12,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.mongodb.core.MongoTemplate;
+
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,6 +35,9 @@ class MemoryServiceTest {
 
     @Mock
     private MemoryRepository memoryRepository;
+
+    @Mock
+    private MongoTemplate mongoTemplate;
 
     @InjectMocks
     private MemoryService memoryService;
@@ -70,51 +79,86 @@ class MemoryServiceTest {
     }
 
     @Test
+    @DisplayName("Deve incrementar accessCount atomicamente e retornar memória ao buscar por ID")
+    void shouldFindByIdAndIncrementAccessCountAtomically() {
+        // Arrange
+        String id = "mem-123";
+        Memory memory = Memory.builder()
+                .id(id)
+                .userId("user-1")
+                .content("Conteúdo de teste")
+                .accessCount(1)
+                .lastAccessedAt(LocalDateTime.now())
+                .build();
+
+        when(mongoTemplate.findAndModify(
+                any(Query.class),
+                any(Update.class),
+                any(FindAndModifyOptions.class),
+                eq(Memory.class)
+        )).thenReturn(memory);
+
+        // Act
+        MemoryResponseDTO response = memoryService.findById(id);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(id, response.id());
+        assertEquals(1, response.accessCount());
+        verify(mongoTemplate, times(1)).findAndModify(any(), any(), any(), eq(Memory.class));
+    }
+
+    @Test
     @DisplayName("Deve lançar ResourceNotFoundException ao buscar ID inexistente")
     void shouldThrowExceptionWhenIdDoesNotExist() {
         // Arrange
         String nonExistingId = "id-fantasma";
-        when(memoryRepository.findById(nonExistingId)).thenReturn(Optional.empty());
+        when(mongoTemplate.findAndModify(
+                any(Query.class),
+                any(Update.class),
+                any(FindAndModifyOptions.class),
+                eq(Memory.class)
+        )).thenReturn(null);
 
         // Act & Assert
         assertThrows(ResourceNotFoundException.class, () -> memoryService.findById(nonExistingId));
-        verify(memoryRepository, times(1)).findById(nonExistingId);
+        verify(mongoTemplate, times(1)).findAndModify(any(), any(), any(), eq(Memory.class));
     }
 
     @Test
-    @DisplayName("Deve retornar memórias ordenadas por relevância de forma decrescente")
+    @DisplayName("Deve ordenar memórias pelo score normalizado balanceando importância, recência e frequência")
     void shouldReturnMemoriesOrderedByRelevance() {
-        //Arrange
-        Memory memoriaBaixa = Memory.builder()
-                .id("mem-baixa")
+        Memory memoriaAntigaPopular = Memory.builder()
+                .id("mem-antiga")
                 .userId("user-1")
-                .content("Essa é uma memória baixa")
-                .type(MemoryType.FACT)
+                .content("Memória antiga muito consultada")
                 .importance(3)
-                .accessCount(0)
-                .createdAt(LocalDateTime.now())
-                .lastAccessedAt(LocalDateTime.now())
+                .accessCount(100)
+                .createdAt(LocalDateTime.now().minusDays(30))
+                .lastAccessedAt(LocalDateTime.now().minusDays(30))
                 .build();
 
-
-        Memory memoriaAlta = Memory.builder()
-                .id("mem-alta")
+        Memory memoriaRecenteImportante = Memory.builder()
+                .id("mem-recente")
                 .userId("user-1")
-                .content("Essa é uma memória alta")
-                .type(MemoryType.FACT)
+                .content("Memória recente e crítica")
                 .importance(9)
-                .accessCount(10)
+                .accessCount(2)
                 .createdAt(LocalDateTime.now())
                 .lastAccessedAt(LocalDateTime.now())
                 .build();
 
-        when(memoryRepository.findByUserId("user-1")).thenReturn(List.of(memoriaBaixa, memoriaAlta));
+        when(memoryRepository.findByUserId("user-1"))
+                .thenReturn(List.of(memoriaAntigaPopular, memoriaRecenteImportante));
 
-
-        // Act
         List<MemoryResponseDTO> response = memoryService.findRelevantMemories("user-1");
-        assertEquals("mem-alta", response.get(0).id());
-        assertEquals("mem-baixa", response.get(1).id());
+
+        assertEquals("mem-recente", response.get(0).id());
+        assertNotNull(response.get(0).relevanceScore());
+        assertEquals("mem-antiga", response.get(1).id());
+        assertNotNull(response.get(1).relevanceScore());
+        assertTrue(response.get(0).relevanceScore() > response.get(1).relevanceScore());
+
         verify(memoryRepository, times(1)).findByUserId("user-1");
     }
 

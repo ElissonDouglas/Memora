@@ -15,10 +15,16 @@ public record MemoryResponseDTO(
         Integer importance,
         Integer accessCount,
         LocalDateTime createdAt,
-        LocalDateTime lastAccessedAt
+        LocalDateTime lastAccessedAt,
+        Double relevanceScore
 ) {
-    // Construtor auxiliar para converter de Entidade para DTO de forma limpa
+    // Conversor sem score (utilizado em create, findById, update)
     public static MemoryResponseDTO fromEntity(Memory memory) {
+        return fromEntity(memory, null);
+    }
+
+    // Conversor com score explícito (utilizado em rotas de busca/relevância)
+    public static MemoryResponseDTO fromEntity(Memory memory, Double relevanceScore) {
         return new MemoryResponseDTO(
                 memory.getId(),
                 memory.getUserId(),
@@ -27,7 +33,8 @@ public record MemoryResponseDTO(
                 memory.getImportance(),
                 memory.getAccessCount(),
                 memory.getCreatedAt(),
-                memory.getLastAccessedAt()
+                memory.getLastAccessedAt(),
+                relevanceScore
         );
     }
 }

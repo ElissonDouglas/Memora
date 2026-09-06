@@ -9,6 +9,11 @@ import com.memory.memora_api.repository.MemoryRepository;
 import com.memory.memora_api.util.VectorMathUtils;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -25,6 +30,17 @@ public class MemoryService {
 
     private final MemoryRepository memoryRepository;
     private final EmbeddingService embeddingService;
+    private final MongoTemplate mongoTemplate;
+
+
+    private static final double WEIGHT_IMPORTANCE = 0.40;
+    private static final double WEIGHT_RECENCY = 0.35;
+    private static final double WEIGHT_FREQUENCY = 0.25;
+
+    // Meia-vida de 72 horas para recência: lambda = ln(2) / 72
+    private static final double RECENCY_LAMBDA = Math.log(2.0) / 72.0;
+    // Ponto de saturação do logaritmo (50 acessos)
+    private static final double LOG_MAX_ACCESS = Math.log(51.0);
 
     public MemoryResponseDTO create(MemoryRequestDTO dto, EmbeddingService embeddingService) {
         List<Double> embedding = embeddingService.generateEmbedding(dto.content());
@@ -41,17 +57,22 @@ public class MemoryService {
     }
 
     public MemoryResponseDTO findById(String id) {
-        Memory memoryFound = memoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Memória não encontrada."));
+        Query query = new Query(Criteria.where("_id").is(id));
 
-        //Incrementa o contador de acessos e altera o lastAccessed para a data e hora atuais
-        memoryFound.setAccessCount(memoryFound.getAccessCount() + 1);
-        memoryFound.setLastAccessedAt(LocalDateTime.now());
+        Update update = new Update()
+                .inc("accessCount", 1)
+                .set("lastAccessedAt", LocalDateTime.now());
 
-        //Salva as atualizações no objeto memoryFound
-        memoryRepository.save(memoryFound);
+        // Configura para retornar o documento já atualizado após o incremento
+        FindAndModifyOptions options = FindAndModifyOptions.options().returnNew(true);
 
-        return MemoryResponseDTO.fromEntity(memoryFound);
+        Memory updatedMemory = mongoTemplate.findAndModify(query, update, options, Memory.class);
+
+        if (updatedMemory == null) {
+            throw new ResourceNotFoundException("Memória não encontrada.");
+        }
+
+        return MemoryResponseDTO.fromEntity(updatedMemory);
     }
 
     public List<MemoryResponseDTO> findByUser(String userId, MemoryType type) {
@@ -91,40 +112,39 @@ public class MemoryService {
         log.info("Memória deletada.");
     }
 
-    //Relevância = Importância + Peso de Frequência + Peso de Recência
     public List<MemoryResponseDTO> findRelevantMemories(String userId) {
         return memoryRepository.findByUserId(userId)
                 .stream()
-                .sorted(Comparator.comparingDouble(this::calculateRelevanceScore).reversed())
-                .map(MemoryResponseDTO::fromEntity)
+                .map(memory -> new AbstractMap.SimpleEntry<>(memory, calculateRelevanceScore(memory)))
+                .sorted((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()))
+                .map(entry -> MemoryResponseDTO.fromEntity(entry.getKey(), entry.getValue()))
                 .toList();
     }
 
-    private double calculateRelevanceScore(Memory memory) {
-        long hoursSinceLastAccess = Duration.between(memory.getLastAccessedAt(), LocalDateTime.now()).toHours();
+    protected double calculateRelevanceScore(Memory memory) {
+        // 1. Importância normalizada [0.1, 1.0]
+        double importanceScore = (memory.getImportance() != null ? memory.getImportance() : 1) / 10.0;
 
-        double recencyWeight;
-        if (hoursSinceLastAccess < 24) {
-            recencyWeight = 3.0;
-        } else if (hoursSinceLastAccess < 168) {
-            recencyWeight = 1.5;
-        } else {
-            recencyWeight = 0.0;
-        }
+        // 2. Recência contínua com decaimento exponencial [0.0, 1.0]
+        LocalDateTime lastAccessed = memory.getLastAccessedAt() != null
+                ? memory.getLastAccessedAt()
+                : memory.getCreatedAt();
+        long hoursElapsed = Duration.between(lastAccessed, LocalDateTime.now()).toHours();
+        double recencyScore = Math.exp(-RECENCY_LAMBDA * Math.max(0, hoursElapsed));
 
-        double frequencyWeight = memory.getAccessCount() * 0.5;
+        // 3. Frequência sublinear amortecida [0.0, 1.0]
+        int count = memory.getAccessCount() != null ? memory.getAccessCount() : 0;
+        double frequencyScore = Math.min(1.0, Math.log(count + 1.0) / LOG_MAX_ACCESS);
 
-        return memory.getImportance() + frequencyWeight + recencyWeight;
+        return (WEIGHT_IMPORTANCE * importanceScore)
+                + (WEIGHT_RECENCY * recencyScore)
+                + (WEIGHT_FREQUENCY * frequencyScore);
     }
 
     public List<MemoryResponseDTO> searchSimilarMemories(String userId, String query, double minSimilarity) {
-        // 1. Gera o vetor da pergunta do usuário/agente
         List<Double> queryEmbedding = embeddingService.generateEmbedding(query);
-
-        // 2. Busca todas as memórias salvas do usuário no banco
         List<Memory> userMemories = memoryRepository.findByUserId(userId);
 
-        // 3. Calcula o score de todas as memórias válidas e guarda em uma lista provisória
         List<AbstractMap.SimpleEntry<Memory, Double>> scoredMemories = userMemories.stream()
                 .filter(memory -> memory.getEmbedding() != null && !memory.getEmbedding().isEmpty())
                 .map(memory -> {
@@ -134,21 +154,18 @@ public class MemoryService {
                 })
                 .toList();
 
-        // 4. Descobre qual foi a nota máxima (o vencedor absoluto)
         double maxScore = scoredMemories.stream()
                 .mapToDouble(AbstractMap.SimpleEntry::getValue)
                 .max()
                 .orElse(0.0);
 
-        // 5. Define a régua dinâmica: deve ser no mínimo o minSimilarity E estar a no máximo 0.08 do vencedor
         double dynamicThreshold = Math.max(minSimilarity, maxScore - 0.08);
         log.info("--- Score Máximo: {} | Threshold Dinâmico Aplicado: {} ---", maxScore, dynamicThreshold);
 
-        // 6. Filtra com a nova régua, ordena do mais próximo para o mais distante e converte
         return scoredMemories.stream()
                 .filter(entry -> entry.getValue() >= dynamicThreshold)
                 .sorted((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()))
-                .map(entry -> MemoryResponseDTO.fromEntity(entry.getKey()))
+                .map(entry -> MemoryResponseDTO.fromEntity(entry.getKey(), entry.getValue()))
                 .toList();
     }
 
