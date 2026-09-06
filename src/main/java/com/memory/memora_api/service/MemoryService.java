@@ -6,6 +6,7 @@ import com.memory.memora_api.exception.ResourceNotFoundException;
 import com.memory.memora_api.model.Memory;
 import com.memory.memora_api.model.MemoryType;
 import com.memory.memora_api.repository.MemoryRepository;
+import com.memory.memora_api.util.VectorMathUtils;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.AbstractMap;
 
 @Service
 @Slf4j
@@ -22,13 +24,16 @@ import java.util.List;
 public class MemoryService {
 
     private final MemoryRepository memoryRepository;
+    private final EmbeddingService embeddingService;
 
-    public MemoryResponseDTO create(MemoryRequestDTO dto) {
+    public MemoryResponseDTO create(MemoryRequestDTO dto, EmbeddingService embeddingService) {
+        List<Double> embedding = embeddingService.generateEmbedding(dto.content());
         Memory memory = Memory.builder()
                 .userId(dto.userId())
                 .type(dto.type())
                 .content(dto.content())
                 .importance(dto.importance())
+                .embedding(embedding)
                 .build();
 
         Memory savedMemory = memoryRepository.save(memory);
@@ -110,6 +115,41 @@ public class MemoryService {
         double frequencyWeight = memory.getAccessCount() * 0.5;
 
         return memory.getImportance() + frequencyWeight + recencyWeight;
+    }
+
+    public List<MemoryResponseDTO> searchSimilarMemories(String userId, String query, double minSimilarity) {
+        // 1. Gera o vetor da pergunta do usuário/agente
+        List<Double> queryEmbedding = embeddingService.generateEmbedding(query);
+
+        // 2. Busca todas as memórias salvas do usuário no banco
+        List<Memory> userMemories = memoryRepository.findByUserId(userId);
+
+        // 3. Calcula o score de todas as memórias válidas e guarda em uma lista provisória
+        List<AbstractMap.SimpleEntry<Memory, Double>> scoredMemories = userMemories.stream()
+                .filter(memory -> memory.getEmbedding() != null && !memory.getEmbedding().isEmpty())
+                .map(memory -> {
+                    double similarity = VectorMathUtils.cosineSimilarity(queryEmbedding, memory.getEmbedding());
+                    log.info("Memória: '{}' | Score: {}", memory.getContent(), similarity);
+                    return new AbstractMap.SimpleEntry<>(memory, similarity);
+                })
+                .toList();
+
+        // 4. Descobre qual foi a nota máxima (o vencedor absoluto)
+        double maxScore = scoredMemories.stream()
+                .mapToDouble(AbstractMap.SimpleEntry::getValue)
+                .max()
+                .orElse(0.0);
+
+        // 5. Define a régua dinâmica: deve ser no mínimo o minSimilarity E estar a no máximo 0.08 do vencedor
+        double dynamicThreshold = Math.max(minSimilarity, maxScore - 0.08);
+        log.info("--- Score Máximo: {} | Threshold Dinâmico Aplicado: {} ---", maxScore, dynamicThreshold);
+
+        // 6. Filtra com a nova régua, ordena do mais próximo para o mais distante e converte
+        return scoredMemories.stream()
+                .filter(entry -> entry.getValue() >= dynamicThreshold)
+                .sorted((e1, e2) -> Double.compare(e2.getValue(), e1.getValue()))
+                .map(entry -> MemoryResponseDTO.fromEntity(entry.getKey()))
+                .toList();
     }
 
 }

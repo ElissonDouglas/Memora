@@ -25,6 +25,9 @@ import static org.mockito.Mockito.*;
 class MemoryServiceTest {
 
     @Mock
+    private EmbeddingService embeddingService;
+
+    @Mock
     private MemoryRepository memoryRepository;
 
     @InjectMocks
@@ -52,10 +55,11 @@ class MemoryServiceTest {
                 .lastAccessedAt(LocalDateTime.now())
                 .build();
 
+        when(embeddingService.generateEmbedding(any(String.class))).thenReturn(List.of(0.1, 0.2, 0.3));
         when(memoryRepository.save(any(Memory.class))).thenReturn(savedMemory);
 
         // Act (Ação)
-        MemoryResponseDTO response = memoryService.create(requestDTO);
+        MemoryResponseDTO response = memoryService.create(requestDTO, embeddingService);
 
         // Assert (Verificação)
         assertNotNull(response);
@@ -112,7 +116,46 @@ class MemoryServiceTest {
         assertEquals("mem-alta", response.get(0).id());
         assertEquals("mem-baixa", response.get(1).id());
         verify(memoryRepository, times(1)).findByUserId("user-1");
+    }
 
+    @Test
+    @DisplayName("Deve realizar busca semântica e filtrar pelo threshold de similaridade")
+    void shouldReturnSimilarMemoriesBasedOnCosineSimilarity() {
+        // Arrange
+        String userId = "user-1";
+        String query = "Assunto de teste";
 
+        // vetor da pergunta
+        List<Double> queryVector = List.of(1.0, 0.0, 0.0);
+
+        // Memória 1: Vetor idêntico à pergunta (Cosseno = 1.0)
+        Memory memoriaRelacionada = Memory.builder()
+                .id("mem-relacionada")
+                .userId(userId)
+                .content("Conteúdo que importa")
+                .embedding(List.of(1.0, 0.0, 0.0))
+                .build();
+
+        // Memória 2: Vetor perpendicular/totalmente diferente (Cosseno = 0.0)
+        Memory memoriaIrrelevante = Memory.builder()
+                .id("mem-irrelevante")
+                .userId(userId)
+                .content("Conteúdo aleatório")
+                .embedding(List.of(0.0, 1.0, 0.0))
+                .build();
+
+        when(embeddingService.generateEmbedding(query)).thenReturn(queryVector);
+        when(memoryRepository.findByUserId(userId)).thenReturn(List.of(memoriaIrrelevante, memoriaRelacionada));
+
+        // Act - Definimos a similaridade mínima em 0.5
+        List<MemoryResponseDTO> results = memoryService.searchSimilarMemories(userId, query, 0.5);
+
+        // Assert
+        assertNotNull(results);
+        assertEquals(1, results.size(), "Deve retornar apenas a memória que passou na linha de corte");
+        assertEquals("mem-relacionada", results.get(0).id(), "A memória retornada deve ser a relacionada");
+
+        verify(embeddingService, times(1)).generateEmbedding(query);
+        verify(memoryRepository, times(1)).findByUserId(userId);
     }
 }

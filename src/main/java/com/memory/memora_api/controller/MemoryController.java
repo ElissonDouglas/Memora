@@ -3,10 +3,12 @@ package com.memory.memora_api.controller;
 import com.memory.memora_api.dto.MemoryRequestDTO;
 import com.memory.memora_api.dto.MemoryResponseDTO;
 import com.memory.memora_api.model.MemoryType;
+import com.memory.memora_api.service.EmbeddingService;
 import com.memory.memora_api.service.MemoryService;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,12 +18,13 @@ import java.util.List;
 @AllArgsConstructor
 public class MemoryController {
 
+    private final EmbeddingService embeddingService;
     private final MemoryService memoryService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public MemoryResponseDTO create(@RequestBody @Valid MemoryRequestDTO memoryRequestDTO) {
-        return memoryService.create(memoryRequestDTO);
+        return memoryService.create(memoryRequestDTO, embeddingService);
     }
 
     @GetMapping("/{id}")
@@ -48,5 +51,15 @@ public class MemoryController {
     @GetMapping("/{userId}/relevant")
     public List<MemoryResponseDTO> getRelevantMemories(@PathVariable String userId) {
         return memoryService.findRelevantMemories(userId);
+    }
+
+    @GetMapping("/user/{userId}/search")
+    public ResponseEntity<List<MemoryResponseDTO>> searchMemories(
+            @PathVariable String userId,
+            @RequestParam String query,
+            @RequestParam(defaultValue = "0.7") double minSimilarity) {
+
+        List<MemoryResponseDTO> results = memoryService.searchSimilarMemories(userId, query, minSimilarity);
+        return ResponseEntity.ok(results);
     }
 }

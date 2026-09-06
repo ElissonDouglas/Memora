@@ -22,6 +22,7 @@ services:
       - mongodb
     environment:
       - SPRING_DATA_MONGODB_URI=mongodb://mongodb:27017/memora_api_db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
 
 volumes:
   mongo_data:

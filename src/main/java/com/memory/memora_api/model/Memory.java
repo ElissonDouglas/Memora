@@ -4,6 +4,7 @@ import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Document(collection = "memories")
 @Getter
@@ -18,6 +19,8 @@ public class Memory {
     private String content;
     private MemoryType type;
     private Integer importance;
+
+    private List<Double> embedding;
 
     @Builder.Default
     private Integer accessCount = 0;
