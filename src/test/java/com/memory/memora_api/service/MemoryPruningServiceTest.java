@@ -27,29 +27,28 @@ class MemoryPruningServiceTest {
     private MemoryPruningService pruningService;
 
     @Test
-    @DisplayName("Deve deletar memórias antigas, de baixa importância e score irrelevante")
+    @DisplayName("Deve deletar apenas memórias filtradas pelo banco que possuam score irrelevante")
     void shouldPruneEligibleMemories() {
-        // Memória elegível: importância baixa (2), inativa há 40 dias e score 0.15
         Memory memoriaObsoleta = Memory.builder()
                 .id("mem-lixo")
                 .importance(2)
                 .lastAccessedAt(LocalDateTime.now().minusDays(40))
                 .build();
 
-        // Memória protegida: inativa há 40 dias, mas importância alta (8)
-        Memory memoriaImportanteAntiga = Memory.builder()
-                .id("mem-valiosa")
-                .importance(8)
-                .lastAccessedAt(LocalDateTime.now().minusDays(40))
+        Memory memoriaFalsoPositivo = Memory.builder()
+                .id("mem-protegida-por-score")
+                .importance(3)
+                .lastAccessedAt(LocalDateTime.now().minusDays(35))
                 .build();
 
-        when(memoryRepository.findAll()).thenReturn(List.of(memoriaObsoleta, memoriaImportanteAntiga));
-        when(memoryService.calculateRelevanceScore(memoriaObsoleta)).thenReturn(0.15);
+        when(memoryRepository.findByImportanceLessThanEqualAndLastAccessedAtBefore(eq(3), any(LocalDateTime.class)))
+                .thenReturn(List.of(memoriaObsoleta, memoriaFalsoPositivo));
 
-        // Executa a poda
+        when(memoryService.calculateRelevanceScore(memoriaObsoleta)).thenReturn(0.15);
+        when(memoryService.calculateRelevanceScore(memoriaFalsoPositivo)).thenReturn(0.40);
+
         pruningService.pruneForgottenMemories();
 
-        // Verifica se apenas a memória obsoleta foi enviada para deleção
         verify(memoryRepository, times(1)).deleteAll(List.of(memoriaObsoleta));
     }
 }

@@ -25,26 +25,18 @@ public class MemoryPruningService {
 
         LocalDateTime thresholdDate = LocalDateTime.now().minusDays(30);
 
-        // Busca todas as memórias salvas no MongoDB
-        List<Memory> allMemories = memoryRepository.findAll();
+        // O Mongo já filtra a importância e a inatividade. Agora retorna apenas os candidatos reais
+        List<Memory> candidateMemories = memoryRepository
+                .findByImportanceLessThanEqualAndLastAccessedAtBefore(3, thresholdDate);
 
-        List<Memory> memoriesToDelete = allMemories.stream()
-                // 1. Apenas memórias de baixa importância
-                .filter(m -> m.getImportance() != null && m.getImportance() <= 3)
-                // 2. Não acessadas há pelo menos 30 dias
-                .filter(m -> {
-                    LocalDateTime lastAccess = m.getLastAccessedAt() != null ? m.getLastAccessedAt() : m.getCreatedAt();
-                    return lastAccess != null && lastAccess.isBefore(thresholdDate);
-                })
-                // 3. Score de relevância geral atual menor que 0.25
+        // O Java filtra apenas o cálculo complexo do score
+        List<Memory> memoriesToDelete = candidateMemories.stream()
                 .filter(m -> memoryService.calculateRelevanceScore(m) < 0.25)
                 .toList();
 
         if (!memoriesToDelete.isEmpty()) {
             memoryRepository.deleteAll(memoriesToDelete);
-            log.info("Rotina concluída: {} memórias obsoletas foram podadas do banco.", memoriesToDelete.size());
-        } else {
-            log.info("Rotina concluída: nenhuma memória elegível para poda.");
+            log.info("Rotina concluída: {} memórias obsoletas podadas.", memoriesToDelete.size());
         }
     }
 }

@@ -1,197 +1,158 @@
-# 🧠 Memora — Intelligent Memory System for AI Agents
+# 🧠 Memora — API de Memória Semântica com IA
 
-**Memora** é um microsserviço *stateless* que fornece memória contextual inteligente e persistência de histórico para agentes de Inteligência Artificial. Em vez de despejar dados brutos ou fazer consultas puramente sequenciais, o serviço avalia o **contexto em tempo de execução**, combinando importância atribuída, frequência de uso e recência (com decaimento temporal), para entregar apenas o que é relevante no momento certo.
+> Um serviço de backend em **Java + Spring Boot** que provê memória semântica vetorial de longo prazo para agentes e assistentes de Inteligência Artificial, integrando embeddings vetoriais com relevância cognitiva dinâmica.
 
-Isso resolve um problema comum em agentes de IA: **janelas de contexto limitadas**. Ao priorizar as memórias mais relevantes em vez de retornar tudo, o Memora ajuda agentes a manter respostas coerentes e personalizadas sem sobrecarregar o modelo com informação desnecessária.
+Modelos de linguagem (LLMs) são naturalmente *stateless*: esquecem o contexto assim que a janela de conversa se encerra. Abordagens ingênuas de histórico (como reenviar todo o chat concatenado) esbarram rapidamente em limites de contexto, custos elevados de tokens e latência proibitiva.
+
+O **Memora** atua como um córtex de memória externa, priorizando as memórias mais relevantes através de orquestração cognitiva no backend em vez de sobrecarregar o modelo com informação desnecessária.
 
 ---
 
 ## ✨ Funcionalidades
 
-- 📥 **Registro de memórias** por usuário, com tipo e nível de importância
-- 🔍 **Consulta inteligente** ordenada por relevância (não apenas por data)
-- 📈 **Rastreamento automático de acesso** — cada leitura atualiza contador e timestamp
-- 🧮 **Score de relevância dinâmico**, combinando importância, frequência e recência
-- 🗂️ **Filtros por tipo de memória** (ex.: preferências, fatos, eventos)
-- 🐳 **Totalmente containerizado** com Docker e Docker Compose
-- ✅ **Cobertura de testes unitários** isolados com JUnit 5 e Mockito
+- 📥 **Vetorização em Tempo Real:** Conversão de textos em embeddings usando a API do Google Gemini (`gemini-embedding-001`).
+- 🔍 **Busca Semântica Adaptativa:** Filtro vetorial por similaridade de cosseno com *Threshold Dinâmico* para mitigar falsos positivos.
+- 🧮 **Score de Relevância Normalizado:** Cálculo contínuo unindo importância, recência com decaimento exponencial e frequência sublinear.
+- ⚡ **Concorrência Atômica:** Atualizações de contadores e acesso via `$inc` e `$set` diretos no MongoDB, sem *race conditions*.
+- 🧹 **Esquecimento Biológico (Pruning):** Rotina assíncrona diária (`@Scheduled`) delegada ao banco para limpar memórias defasadas e inúteis.
+- 🐳 **Pronto para Produção:** Containerizado com Docker, testes unitários (Mockito) e Integração Contínua via GitHub Actions.
 
 ---
 
-## 🏗️ Arquitetura
-
-O serviço segue um padrão em camadas desacopladas, garantindo isolamento das regras de domínio, DTOs imutáveis e testes unitários sem dependências externas.
+## 🏗️ Arquitetura do Sistema
 
 ```mermaid
-graph TD
-    Client[AI Agent / HTTP Client] -->|JSON / HTTP| Controller[MemoryController]
-    Controller -->|DTOs| Service[MemoryService]
-    Service -->|Entities| Repository[MemoryRepository]
-    Repository -->|BSON| Mongo[(MongoDB)]
+flowchart TD
+    Client(["Agente de IA / Cliente HTTP"])
 
-    subgraph "Core Engine"
-        Service --> Scorer[Relevance Scorer]
-        Service --> AccessTracker[Access Tracker]
+    subgraph API ["Spring Boot Application"]
+        Controller["MemoryController (REST API)"]
+        Service["MemoryService"]
+        Embedding["EmbeddingService"]
+        VectorMath["VectorMathUtils\n(Similaridade de Cosseno)"]
+        Pruner["MemoryPruningService\n(@Scheduled - 03:00 AM)"]
     end
-```
 
-| Camada | Responsabilidade |
-|---|---|
-| **Controller** | Expõe os endpoints REST e valida requisições |
-| **Service** | Orquestra regras de negócio, cálculo de score e rastreamento de acesso |
-| **Repository** | Abstrai a persistência das memórias no MongoDB |
-| **Relevance Scorer** | Calcula dinamicamente a pontuação de cada memória |
-| **Access Tracker** | Atualiza contador de acessos e o timestamp de última leitura |
+    subgraph External ["Serviços Externos & Persistência"]
+        Gemini[("Google Gemini API\ngemini-embedding-001")]
+        MongoDB[("MongoDB\n(Coleção: memories)")]
+    end
 
----
+    %% Fluxos de escrita e leitura
+    Client -->|"POST /api/memories"| Controller
+    Client -->|"GET /search | /relevant | /{id}"| Controller
+    Controller --> Service
 
-## 🧮 Algoritmo de Relevância
+    %% Fluxo de Embeddings
+    Service -->|"Gera vetor (texto)"| Embedding
+    Embedding -->|"POST /v1beta/models"| Gemini
+    Gemini -.->|"Vetor 768d"| Embedding
 
-Para priorizar memórias essenciais sem estourar a janela de contexto dos modelos de linguagem, o Memora calcula um score dinâmico:
+    %% Busca e Matemática
+    Service -->|"Calcula cosseno e threshold"| VectorMath
 
-```
-Score = Importância Base + (accessCount × 0.5) + Peso de Recência
-```
+    %% Persistência e Poda
+    Service -->|"findAndModify ($inc,$set)"| MongoDB
+    Pruner -->|"Query Derivada (Filtro base) e Deleção"| MongoDB
 
-| Componente | Regra |
-|---|---|
-| **Importância Base** | Escala de `1` a `10`, definida na criação ou atualização |
-| **Frequência** | Cada consulta unitária incrementa o contador de acesso |
-| **Recência** | Bônus de acordo com o último acesso: |
-| | `< 24h` → **+3.0** |
-| | `< 7 dias (168h)` → **+1.5** |
-| | `> 7 dias` → **+0.0** |
-
-Assim, memórias importantes, acessadas com frequência e recentemente consultadas sobem naturalmente na lista de relevância.
-
----
-
-## 🚀 Tecnologias
-
-| Categoria | Stack |
-|---|---|
-| Linguagem / Framework | Java 21 · Spring Boot 3 |
-| Persistência | MongoDB (NoSQL orientado a documentos) |
-| Testes | JUnit 5 · Mockito |
-| Build | Maven |
-| Utilitários | Lombok |
-| Containerização | Docker · Docker Compose (multi-stage build) |
-
----
-
-## 📡 Endpoints da API
-
-| Método | Rota | Descrição | Status |
-|---|---|---|---|
-| `POST` | `/api/memories` | Registra uma nova memória | `201 Created` |
-| `GET` | `/api/memories/{id}` | Busca por ID e rastreia o acesso | `200 OK` |
-| `GET` | `/api/memories/user/{userId}` | Lista memórias do usuário (aceita filtro `?type=`) | `200 OK` |
-| `GET` | `/api/memories/user/{userId}/relevant` | Recupera memórias ordenadas pelo score de relevância | `200 OK` |
-| `PUT` | `/api/memories/{id}` | Atualiza conteúdo, importância ou tipo | `200 OK` |
-| `DELETE` | `/api/memories/{id}` | Remove uma memória | `204 No Content` |
-
-### Exemplo — Criando uma memória
-
-**Requisição** `POST /api/memories`
-```json
-{
-  "userId": "agent-user-01",
-  "content": "O usuário prefere respostas estruturadas e testes no padrão AAA.",
-  "type": "PREFERENCE",
-  "importance": 9
-}
-```
-
-**Resposta** `201 Created`
-```json
-{
-  "id": "66d63cb535e6cf7b94921f01",
-  "userId": "agent-user-01",
-  "content": "O usuário prefere respostas estruturadas e testes no padrão AAA.",
-  "type": "PREFERENCE",
-  "importance": 9,
-  "accessCount": 0,
-  "createdAt": "2026-09-02T20:20:00",
-  "lastAccessedAt": "2026-09-02T20:20:00"
-}
-```
-
-**Erro de validação** `400 Bad Request`
-```json
-{
-  "timestamp": "2026-09-02T20:21:10.123Z",
-  "status": 400,
-  "error": "Erro de validação de dados",
-  "message": "Um ou mais campos contêm erros de validação.",
-  "path": "/api/memories",
-  "details": [
-    "importance: O valor da importância deve estar entre 1 e 10"
-  ]
-}
 ```
 
 ---
 
-## ⚙️ Como executar
+## 🔬 Engenharia & Algoritmos
+
+### 1. Busca Semântica com Threshold Dinâmico
+
+Em vez de aplicar uma linha de corte rígida que deixaria passar ruídos, o motor vetorial calcula a similaridade de cosseno e aplica uma régua dinâmica com base no melhor resultado encontrado:
+
+$$\text{dynamicThreshold} = \max(\text{minSimilarity}, \text{maxScore} - 0.08)$$
+
+### 2. Score de Relevância Cognitiva Normalizado
+
+O cálculo de relevância é estritamente balanceado no intervalo $[0.0, 1.0]$, combinando as seguintes dimensões:
+
+$$\text{Score} = (0.40 \cdot S_{\text{importância}}) + (0.35 \cdot S_{\text{recência}}) + (0.25 \cdot S_{\text{frequência}})$$
+
+* **Decaimento Exponencial Contínuo ($S_{\text{recência}}$):** Baseado no tempo decorrido em horas ($t$) desde o último acesso, com meia-vida ($t_{1/2}$) de 72 horas. Evita degraus abruptos.
+
+$$S_{\text{recência}} = e^{-\lambda \cdot t}$$
+
+
+* **Frequência Sublinear Amortecida ($S_{\text{frequência}}$):** Evita que dezenas de consultas a uma memória trivial esmaguem informações vitais, usando logaritmo natural com saturação em 50 acessos.
+
+$$S_{\text{frequência}} = \min\left(1.0, \frac{\ln(\text{accessCount} + 1)}{\ln(50 + 1)}\right)$$
+
+
+
+### 3. Mecanismo de Esquecimento (Memory Pruning)
+
+Uma rotina disparada diariamente às 03:00 am aplica uma limpeza de dados em duas vias (Banco + Aplicação) baseada em:
+
+1. **Baixa Importância:** Nota igual ou inferior a 3.
+2. **Inatividade Prolongada:** Sem acesso há mais de 30 dias.
+3. **Score Residual:** Relevância final inferior a 0.25.
+
+---
+
+## 🚀 Como Executar
 
 ### Pré-requisitos
-- [Docker](https://www.docker.com/) e [Docker Compose](https://docs.docker.com/compose/) instalados
-- (Opcional, para build local sem Docker) Java 21 e Maven
 
-### Com Docker (recomendado)
+* **Docker** e **Docker Compose**.
+* Uma chave válida da API do Google AI Studio.
+
+### Configuração
+
+1. Clone o repositório:
 
 ```bash
-# 1. Clone o repositório
-git clone https://github.com/ElissonDouglas/Memora.git
+git clone [https://github.com/ElissonDouglas/Memora.git](https://github.com/ElissonDouglas/Memora.git)
 cd Memora
 
-# 2. Suba os containers da API e do MongoDB
-docker compose up --build
 ```
 
-A aplicação estará disponível em `http://localhost:8080`.
+2. Crie um arquivo `.env` na raiz do projeto e insira sua chave do Gemini:
 
-### Localmente com Maven
+```env
+GEMINI_API_KEY=sua_chave_do_google_ai_studio_aqui
+
+```
+
+3. Suba os containers da API e do MongoDB:
 
 ```bash
-./mvnw spring-boot:run
+docker compose up -d --build
+
 ```
-> Certifique-se de ter uma instância do MongoDB acessível e configurada nas variáveis de ambiente/`application.properties` do projeto.
 
----
+A API estará acessível em `http://localhost:8080`.
 
-## 🧪 Testes
-
-Para executar a suíte de testes unitários isolados (JUnit 5 + Mockito):
+### Executando Testes Locais
 
 ```bash
-mvn test
+./mvnw clean test
+
 ```
 
 ---
 
-## 🗺️ Roadmap
+## 📡 Principais Endpoints
 
-- [ ] Autenticação e autorização por API Key/JWT
-- [ ] Suporte a expiração automática (TTL) de memórias de baixa relevância
-- [ ] Endpoint de busca semântica (embeddings)
-- [ ] Métricas e observabilidade (Prometheus/Grafana)
-- [ ] Documentação interativa via Swagger/OpenAPI
-
----
-
-## 🤝 Contribuindo
-
-Contribuições são bem-vindas! Para contribuir:
-
-1. Faça um fork do projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/minha-feature`)
-3. Commit suas alterações (`git commit -m 'feat: minha nova feature'`)
-4. Push para a branch (`git push origin feature/minha-feature`)
-5. Abra um Pull Request
+| Método | Endpoint | Descrição |
+| --- | --- | --- |
+| `POST` | `/api/memories` | Cria memória e gera o embedding via Gemini |
+| `GET` | `/api/memories/user/{userId}/search` | Busca semântica vetorial `?query=...` com threshold dinâmico |
+| `GET` | `/api/memories/{userId}/relevant` | Retorna memórias ranqueadas pelo score cognitivo $[0.0, 1.0]$ |
+| `GET` | `/api/memories/{id}` | Busca isolada que dispara incremento atômico de acessos |
+| `DELETE` | `/api/memories/{id}` | Remove uma memória específica manualmente |
 
 ---
 
-## 👤 Autor
+## 🗺️ Roadmap / Próximos Passos
 
-Desenvolvido por [**Elisson Douglas**](https://github.com/ElissonDouglas).
+* [ ] **Autenticação:** Proteger endpoints e isolar inquilinos (Multi-tenant) com Spring Security e JWT.
+* [ ] **Documentação Interativa:** Interface visual com OpenAPI/Swagger (`springdoc-openapi`).
+* [ ] **Escala de Dados:** Migrar a similaridade de cosseno em memória para o índice de vetor nativo do MongoDB Atlas (`$vectorSearch`).
+* [ ] **Observabilidade:** Métricas e monitoramento usando Spring Boot Actuator e Micrometer.
+
+---

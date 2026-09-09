@@ -11,7 +11,7 @@ import org.springframework.data.mongodb.core.SimpleMongoClientDatabaseFactory;
 @Configuration
 public class MongoConfig {
 
-    private static final String DATABASE_NAME = "memory_api_db";
+    private static final String DATABASE_NAME = "memora_api_db";
 
     @Value("${spring.data.mongodb.uri:mongodb://localhost:27017}")
     private String connectionUri;

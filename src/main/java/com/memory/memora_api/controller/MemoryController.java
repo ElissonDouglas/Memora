@@ -22,9 +22,8 @@ public class MemoryController {
     private final MemoryService memoryService;
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public MemoryResponseDTO create(@RequestBody @Valid MemoryRequestDTO memoryRequestDTO) {
-        return memoryService.create(memoryRequestDTO, embeddingService);
+    public ResponseEntity<MemoryResponseDTO> createMemory(@RequestBody @Valid MemoryRequestDTO request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(memoryService.create(request));
     }
 
     @GetMapping("/{id}")
@@ -57,7 +56,8 @@ public class MemoryController {
     public ResponseEntity<List<MemoryResponseDTO>> searchSimilarMemories(
             @PathVariable String userId,
             @RequestParam String query,
-            @RequestParam(defaultValue = "0.58") double minSimilarity) {
+            // Injeta propriedade com valor padrão 0.58 caso não exista no application.properties
+            @RequestParam(defaultValue = "${memora.search.default-min-similarity:0.58}") double minSimilarity) {
         return ResponseEntity.ok(memoryService.searchSimilarMemories(userId, query, minSimilarity));
     }
 }

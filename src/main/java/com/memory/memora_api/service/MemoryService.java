@@ -37,12 +37,15 @@ public class MemoryService {
     private static final double WEIGHT_RECENCY = 0.35;
     private static final double WEIGHT_FREQUENCY = 0.25;
 
+    // Margem de tolerância abaixo do melhor score encontrado para eliminar ruídos
+    private static final double DYNAMIC_THRESHOLD_MARGIN = 0.08;
+
     // Meia-vida de 72 horas para recência: lambda = ln(2) / 72
     private static final double RECENCY_LAMBDA = Math.log(2.0) / 72.0;
     // Ponto de saturação do logaritmo (50 acessos)
     private static final double LOG_MAX_ACCESS = Math.log(51.0);
 
-    public MemoryResponseDTO create(MemoryRequestDTO dto, EmbeddingService embeddingService) {
+    public MemoryResponseDTO create(MemoryRequestDTO dto) {
         List<Double> embedding = embeddingService.generateEmbedding(dto.content());
         Memory memory = Memory.builder()
                 .userId(dto.userId())
@@ -88,13 +91,18 @@ public class MemoryService {
                 .toList();
     }
 
-    public MemoryResponseDTO update(String id, MemoryRequestDTO dto) {
+    public MemoryResponseDTO update(String id, MemoryRequestDTO request) {
         Memory memory = memoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Memória não encontrada."));
 
-        memory.setContent(dto.content());
-        memory.setType(dto.type());
-        memory.setImportance(dto.importance());
+        // Recalcula o embedding apenas se o conteúdo foi alterado
+        if (!memory.getContent().equals(request.content())) {
+            List<Double> newEmbedding = embeddingService.generateEmbedding(request.content());
+            memory.setEmbedding(newEmbedding);
+            memory.setContent(request.content());
+        }
+        memory.setType(request.type());
+        memory.setImportance(request.importance());
         log.info("Dados atualizados.");
 
         Memory updatedMemory = memoryRepository.save(memory);
@@ -159,7 +167,7 @@ public class MemoryService {
                 .max()
                 .orElse(0.0);
 
-        double dynamicThreshold = Math.max(minSimilarity, maxScore - 0.08);
+        double dynamicThreshold = Math.max(minSimilarity, maxScore - DYNAMIC_THRESHOLD_MARGIN);
         log.info("--- Score Máximo: {} | Threshold Dinâmico Aplicado: {} ---", maxScore, dynamicThreshold);
 
         return scoredMemories.stream()

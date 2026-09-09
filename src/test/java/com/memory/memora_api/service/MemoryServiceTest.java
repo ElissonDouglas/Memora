@@ -68,7 +68,7 @@ class MemoryServiceTest {
         when(memoryRepository.save(any(Memory.class))).thenReturn(savedMemory);
 
         // Act (Ação)
-        MemoryResponseDTO response = memoryService.create(requestDTO, embeddingService);
+        MemoryResponseDTO response = memoryService.create(requestDTO);
 
         // Assert (Verificação)
         assertNotNull(response);
